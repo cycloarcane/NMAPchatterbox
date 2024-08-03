@@ -18,6 +18,8 @@
 
 **NMAP Chatterbox** is a snippet project focused on utilizing nmap scans and automating the discussion of scan results using a group chat with multiple AI agents specializing in cybersecurity analysis. This repository is just a small proof of concept, please look at my other repos for more depth.
 
+Primarily this demonstrates how you can feed tool data into the front of an LLM powered pipeline.
+
 ---
 
 ## How to Contribute
