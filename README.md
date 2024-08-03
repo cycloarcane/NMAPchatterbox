@@ -20,6 +20,8 @@
 
 Primarily this demonstrates how you can feed tool data into the front of an LLM powered pipeline.
 
+There's a GUI version that uses tkinter and is pink if you like nice things.
+
 ---
 
 ## How to Contribute
