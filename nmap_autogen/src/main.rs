@@ -1,45 +1,30 @@
-use dotenv::dotenv;
-use std::env;
-use std::process::Command;
-use tokio::task;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::env;
+use std::error::Error;
+use std::process::Command;
 
-// Function to get the OpenAI API key from environment variables
-fn get_api_key() -> String {
-    dotenv().ok();
-    env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set")
+#[derive(Serialize)]
+struct Message {
+    role: String,
+    content: String,
 }
 
-// Function to run nmap scan
-async fn run_nmap_scan(target: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let target = target.to_string();
-    let output = task::spawn_blocking(move || {
-        Command::new("nmap")
-            .arg(target)
-            .arg("-sV")
-            .arg("-sC")
-            .output()
-    })
-    .await??;
-
-    if !output.status.success() {
-        return Err(format!(
-            "Nmap command failed with exit code: {}",
-            output.status
-        ).into());
-    }
-
-    let stdout = String::from_utf8(output.stdout)?;
-    Ok(stdout)
-}
-
-// Structs for OpenAI API request and response
 #[derive(Serialize)]
 struct OpenAIRequest {
     model: String,
-    prompt: String,
+    messages: Vec<Message>,
     max_tokens: u32,
+}
+
+#[derive(Deserialize)]
+struct Choice {
+    message: MessageContent,
+}
+
+#[derive(Deserialize)]
+struct MessageContent {
+    content: String,
 }
 
 #[derive(Deserialize)]
@@ -47,37 +32,42 @@ struct OpenAIResponse {
     choices: Vec<Choice>,
 }
 
-#[derive(Deserialize)]
-struct Choice {
-    text: String,
-}
-
-// Function to get response from OpenAI API
-async fn get_openai_response(api_key: &str, prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
+async fn get_openai_response(prompt: &str, api_key: &str) -> Result<String, Box<dyn Error>> {
     let client = Client::new();
     let request = OpenAIRequest {
-        model: "gpt-4o-mini".into(),
-        prompt: prompt.into(),
+        model: "gpt-3.5-turbo".to_string(),
+        messages: vec![
+            Message {
+                role: "user".to_string(),
+                content: prompt.to_string(),
+            },
+        ],
         max_tokens: 150,
     };
 
     let response = client
-        .post("https://api.openai.com/v1/completions")
+        .post("https://api.openai.com/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", api_key))
         .json(&request)
         .send()
-        .await?
-        .json::<OpenAIResponse>()
         .await?;
 
-    Ok(response.choices[0].text.clone())
+    if response.status().is_success() {
+        let openai_response = response.json::<OpenAIResponse>().await?;
+        let choice = &openai_response.choices[0].message;
+        Ok(choice.content.clone())
+    } else {
+        let error_text = response.text().await?;
+        Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("API Error: {}", error_text),
+        )))
+    }
 }
 
-// Main function
-#[tokio::main]
-async fn main() {
-    // Print ASCII art (can be replaced with a function if needed)
-    println!("
+fn cuddles_art() {
+    println!(
+        r#"
      ▄████▄   ██░ ██  ▄▄▄     ▄▄▄█████▓▄▄▄█████▓▓█████  ██▀███      ▄▄▄▄    ▒█████  ▒██   ██▒   
     ▒██▀ ▀█  ▓██░ ██▒▒████▄   ▓  ██▒ ▓▒▓  ██▒ ▓▒▓█   ▀ ▓██ ▒ ██▒   ▓█████▄ ▒██▒  ██▒▒▒ █ █ ▒░   
     ▒▓█    ▄ ▒██▀▀██░▒██  ▀█▄ ▒ ▓██░ ▒░▒ ▓██░ ▒░▒███   ▓██ ░▄█ ▒   ▒██▒ ▄██▒██░  ██▒░░  █   ░   
@@ -88,32 +78,50 @@ async fn main() {
     ░         ░  ░░ ░  ░   ▒    ░        ░         ░     ░░   ░     ░    ░ ░ ░ ░ ▒   ░    ░     
     ░ ░       ░  ░  ░      ░  ░                    ░  ░   ░         ░          ░ ░   ░    ░     
     ░                                                                    ░                         
-    ");
+    "#
+    );
+}
 
-    // Get the target IP or domain
+fn run_nmap_scan(target: &str) -> String {
+    let output = Command::new("nmap")
+        .arg(target)
+        .output()
+        .expect("failed to execute nmap");
+
+    if output.status.success() {
+        String::from_utf8_lossy(&output.stdout).to_string()
+    } else {
+        format!(
+            "nmap command failed with error: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    cuddles_art();
+
     let mut target = String::new();
     println!("Please enter the target IP or domain for nmap scan: ");
-    std::io::stdin().read_line(&mut target).expect("Failed to read input");
+    std::io::stdin().read_line(&mut target)?;
     let target = target.trim();
 
     if target.is_empty() {
         println!("Target is required. Exiting.");
-        return;
+        return Ok(());
     }
 
-    // Run the Nmap scan
-    match run_nmap_scan(target).await {
-        Ok(scan_result) => {
-            println!("\nNmap scan results:\n{}", scan_result);
+    let scan_result = run_nmap_scan(target);
+    println!("\nNmap scan results:\n{}", scan_result);
 
-            // Initiate group chat with scan results (placeholder for actual implementation)
-            let api_key = get_api_key();
-            let context = format!("Nmap Scan Results:\n{}", scan_result);
-            match get_openai_response(&api_key, &context).await {
-                Ok(response) => println!("OpenAI response: {}", response),
-                Err(e) => eprintln!("Error getting OpenAI response: {}", e),
-            }
-        }
-        Err(e) => eprintln!("Error running nmap scan: {}", e),
+    let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
+    let prompt = format!("Nmap scan results:\n{}", scan_result);
+
+    match get_openai_response(&prompt, &api_key).await {
+        Ok(response) => println!("OpenAI response: {}", response),
+        Err(err) => eprintln!("Error getting OpenAI response: {}", err),
     }
+
+    Ok(())
 }
