@@ -13,7 +13,7 @@ idna==3.7
 numpy==1.26.4
 openai==1.38.0
 packaging==24.1
-pyautogen==0.2.33
+ag2==0.2.33
 pydantic==2.8.2
 pydantic_core==2.20.1
 python-dotenv==1.0.1
